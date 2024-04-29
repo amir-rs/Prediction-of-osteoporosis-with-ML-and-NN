@@ -7,21 +7,32 @@ Original file is located at
     https://colab.research.google.com/drive/1KBk2XZfLD9B2CyGMARyGhUS7BhKNwCby
 """
 
+# Importing necessary libraries
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.preprocessing import LabelEncoder , StandardScaler
+
+# Preprocessing and modeling
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from imblearn.over_sampling import SMOTE
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import accuracy_score , precision_score , recall_score , f1_score , confusion_matrix , make_scorer
-from sklearn.ensemble import RandomForestClassifier , AdaBoostClassifier
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, make_scorer
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import LearningRateScheduler
+
+# Suppressing warnings
 import warnings
 warnings.filterwarnings("ignore")
 
-df = pd.read_csv('osteoporosis.csv')
+from google.colab import drive
+drive.mount('/content/drive')
+
+df = pd.read_csv('/content/drive/MyDrive/DataSets/Osteoporosis Risk Prediction/osteoporosis.csv')
 df.head()
 
 df.shape
@@ -129,57 +140,6 @@ print(f'precision :  {precision:.2f}%')
 print(f'recall :  {recall:.2f}%')
 print(f'F1 score :  {f1:.2f}%')
 print(f'score :  {score:.2f}%')
-
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import Adam
-import matplotlib.pyplot as plt
-
-# Determine the number of hidden layers and neurons to test
-hidden_layers = [1, 2, 3, 4]  # The number of hidden layers
-neurons =[16, 32, 64, 128]  # The number of neurons in each layer
-
-best_accuracy = 0
-best_model = None
-
-for num_layers in hidden_layers:
-    for num_neurons in neurons:
-        # creat model
-        model = Sequential()
-        model.add(Dense(num_neurons, activation='relu', input_shape=(X_train.shape[1],)))
-        for _ in range(num_layers - 1):
-            model.add(Dense(num_neurons, activation='relu'))
-            model.add(Dropout(0.2))
-        model.add(Dense(1, activation='sigmoid'))
-
-        # compile model
-        model.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
-
-        # train model
-        history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_data=(X_val, y_val), verbose=0)
-
-        # metrics accuracy
-        y_pred_prob = model.predict(X_test)
-        y_pred = (y_pred_prob > 0.5).astype(int)
-        accuracy = accuracy_score(y_test, y_pred)
-        print(f"Neural Network Accuracy with {num_layers} layers and {num_neurons} neurons: {accuracy}")
-        #save best model
-        if accuracy > best_accuracy:
-            best_accuracy = accuracy
-            best_model = model
-
-print("Best Neural Network Accuracy:", best_accuracy)
-
-train_accuracy = history.history['accuracy']
-val_accuracy = history.history['val_accuracy']
-epochs = range(1, len(train_accuracy) + 1)
-plt.plot(epochs, train_accuracy, 'b', label='Training accuracy')
-plt.plot(epochs, val_accuracy, 'r', label='Validation accuracy')
-plt.title('Training and Validation accuracy')
-plt.xlabel('Epochs')
-plt.ylabel('Accuracy')
-plt.legend()
-plt.show()
 
 from sklearn.svm import SVC
 model = SVC(kernel='linear', random_state=42)
@@ -361,3 +321,197 @@ plt.ylabel('True Positive Rate')
 plt.grid(True)
 plt.show();
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, LeakyReLU
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import EarlyStopping, LearningRateScheduler
+from tensorflow.keras.regularizers import l1_l2
+
+# Assuming X and y are your feature and target matrices
+
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Standardize features
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Define advanced neural network architecture
+model = Sequential([
+    Dense(512, input_dim=X_train_scaled.shape[1]),
+    BatchNormalization(),
+    LeakyReLU(alpha=0.1),
+    Dropout(0.2),
+    Dense(256, kernel_regularizer=l1_l2(l1=0.001, l2=0.001)),
+    BatchNormalization(),
+    LeakyReLU(alpha=0.1),
+    Dropout(0.2),
+    Dense(128, kernel_regularizer=l1_l2(l1=0.001, l2=0.001)),
+    BatchNormalization(),
+    LeakyReLU(alpha=0.1),
+    Dropout(0.2),
+    Dense(64, kernel_regularizer=l1_l2(l1=0.001, l2=0.001)),
+    BatchNormalization(),
+    LeakyReLU(alpha=0.1),
+    Dropout(0.2),
+    Dense(1, activation='sigmoid')
+])
+
+# Define custom learning rate scheduler
+def lr_scheduler(epoch, lr):
+    if epoch % 10 == 0 and epoch != 0:
+        lr = lr * 0.9
+    return lr
+
+# Compile the model with Adam optimizer and custom learning rate scheduler
+optimizer = Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-07)
+model.compile(optimizer=optimizer,
+              loss='binary_crossentropy',
+              metrics=['accuracy'])
+
+# Define early stopping callback
+early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+
+# Define learning rate scheduler callback
+lr_scheduler_callback = LearningRateScheduler(lr_scheduler)
+
+# Train the model with early stopping and learning rate scheduler callbacks
+history = model.fit(X_train_scaled, y_train, epochs=100, batch_size=64,
+                    validation_split=0.2, callbacks=[early_stopping, lr_scheduler_callback], verbose=1)
+
+# Evaluate the model
+y_pred_prob = model.predict(X_test_scaled).ravel()
+y_pred = (y_pred_prob > 0.5).astype(int)
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+
+print(f'Accuracy: {accuracy:.4f}')
+print(f'Precision: {precision:.4f}')
+print(f'Recall: {recall:.4f}')
+print(f'F1 Score: {f1:.4f}')
+
+# Plot ROC curve
+fpr, tpr, _ = roc_curve(y_test, y_pred_prob)
+roc_auc = auc(fpr, tpr)
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.2f})')
+plt.plot([0, 1], [0, 1], 'k--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.legend(loc='lower right')
+plt.show()
+
+# Plot training history
+plt.figure(figsize=(8, 6))
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.xlabel('Epochs')
+plt.ylabel('Accuracy')
+plt.title('Training and Validation Accuracy')
+plt.legend()
+plt.show()
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split, ParameterGrid, KFold
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, LeakyReLU
+from tensorflow.keras.optimizers import Adam, RMSprop
+from tensorflow.keras.callbacks import EarlyStopping, LearningRateScheduler
+from tensorflow.keras.regularizers import l1_l2
+from tensorflow.keras.optimizers import legacy
+
+# Assuming X and y are defined as your input features and target variable
+
+# Split data into train, validation, and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
+
+# Standardize the data
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_val_scaled = scaler.transform(X_val)
+X_test_scaled = scaler.transform(X_test)
+
+# Define advanced neural network architecture
+def create_model(optimizer=legacy.Adam(), dropout_rate=0.2, l1_reg=0.01, l2_reg=0.01):
+    model = Sequential()
+    model.add(Dense(128, input_dim=X_train_scaled.shape[1], kernel_regularizer=l1_l2(l1=l1_reg, l2=l2_reg)))
+    model.add(BatchNormalization())
+    model.add(LeakyReLU(alpha=0.1))
+    model.add(Dropout(dropout_rate))
+    model.add(Dense(64, kernel_regularizer=l1_l2(l1=l1_reg, l2=l2_reg)))
+    model.add(BatchNormalization())
+    model.add(LeakyReLU(alpha=0.1))
+    model.add(Dropout(dropout_rate))
+    model.add(Dense(32, kernel_regularizer=l1_l2(l1=l1_reg, l2=l2_reg)))
+    model.add(BatchNormalization())
+    model.add(LeakyReLU(alpha=0.1))
+    model.add(Dropout(dropout_rate))
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+    return model
+
+# Learning rate scheduler
+def lr_scheduler(epoch, lr):
+    if epoch % 10 == 0 and epoch > 0:
+        lr = lr * 0.9
+    return lr
+
+# Hyperparameter tuning with k-fold cross-validation
+param_grid = {'optimizer': [legacy.Adam(), legacy.RMSprop()], 'dropout_rate': [0.2, 0.3, 0.4], 'l1_reg': [0.01, 0.001], 'l2_reg': [0.01, 0.001]}
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+
+best_scores = []
+best_models = []
+
+for train_index, val_index in kf.split(X_train_scaled):
+    X_train_kf, X_val_kf = X_train_scaled[train_index], X_train_scaled[val_index]
+    y_train_kf, y_val_kf = y_train.iloc[train_index], y_train.iloc[val_index]
+
+    models = []
+    scores = []
+
+    for params in ParameterGrid(param_grid):
+        model = create_model(**params)
+        early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+        lr_scheduler_callback = LearningRateScheduler(lr_scheduler)
+        history = model.fit(X_train_kf, y_train_kf, epochs=100, validation_data=(X_val_kf, y_val_kf), callbacks=[early_stopping, lr_scheduler_callback], verbose=0)
+        scores.append(max(history.history['val_accuracy']))
+        models.append(model)
+
+    best_model_index = np.argmax(scores)
+    best_models.append(models[best_model_index])
+    best_scores.append(scores[best_model_index])
+
+best_model_index = np.argmax(best_scores)
+best_model = best_models[best_model_index]
+print('Best model index:', best_model_index)
+
+# Evaluate the best model
+y_pred_prob = best_model.predict(X_test_scaled)
+y_pred = (y_pred_prob > 0.5).astype(int)
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+
+print(f'Accuracy: {accuracy:.4f}')
+print(f'Precision: {precision:.4f}')
+print(f'Recall: {recall:.4f}')
+print(f'F1 Score: {f1:.4f}')
